@@ -12,14 +12,14 @@ TRAINED = False
 
 st.title("Recommender System")
 
-st.write('''Upload a csv-file (delimiter ';') with one row per rating and three columns in order 
-         <USER_ID>, <ITEM_ID>, <RATING>. The first row is assumed to contain column headers 
-         and no rating information:''')
-
+st.write('''Train a recommender system with collaborative filtering approaches. Ratings for
+         user-item pairs need to be provided for training:''')
 df_styler = pd.DataFrame({'USER_ID': ['ab$956', 'kl73fv', 'xx98gh'], 'ITEM_ID': [0, 1, 1], 
                           'RATING': [4, 1, 3]}).style.hide()
-st.table(data=df_styler)
-
+st.table(data=df_styler)  
+         
+st.write('''Calculated recommendations will be clipped to the scale 
+         [minimum rating, maximum rating]:''')
 col1, col2 = st.columns(2)
 with col1:
     rating_min = st.number_input(label='Minimum Rating', value=1)
@@ -27,7 +27,9 @@ with col1:
 with col2:
     rating_max = st.number_input(label='Maximum Rating', value=5)
 
-inp_file = st.file_uploader("Choose one csv file")
+inp_file = st.file_uploader(label='''Upload a csv-file (delimiter ';') with one row per rating and three columns in order 
+         <USER_ID>, <ITEM_ID>, <RATING>. The first row is assumed to contain column headers 
+         and no rating information:''')
 
 data = None
 
