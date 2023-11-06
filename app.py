@@ -1,9 +1,9 @@
 import streamlit as st
 import io
-import numpy as np
 import pandas as pd
-from surprise import BaselineOnly, Dataset, Reader, accuracy, SVD, KNNBasic
-from surprise.dump import dump, load
+import csv
+from surprise import Dataset, Reader, accuracy, SVD, KNNBasic
+from surprise.dump import dump
 from surprise.model_selection import train_test_split
 
 import surprise_utils as s_utils
@@ -12,14 +12,13 @@ TRAINED = False
 
 st.title("Recommender System")
 
-st.write('''Train a recommender system with collaborative filtering approaches. Ratings for
-         user-item pairs need to be provided for training:''')
+st.write('''App zur Erstellung eines Recommender-Systems basierend auf Kollaborativen Filtern-Verfahren.
+         Ratings für User-Item Paare müssen als Trainingsdatensatz zur Verfügung gestellt werden:''')
 df_styler = pd.DataFrame({'USER_ID': ['ab$956', 'kl73fv', 'xx98gh'], 'ITEM_ID': [0, 1, 1], 
                           'RATING': [4, 1, 3]}).style.hide()
 st.table(data=df_styler)  
          
-st.write('''Calculated recommendations will be clipped to the scale 
-         [minimum rating, maximum rating]:''')
+st.write('''Berechnete Empfehlungen werden auf die Skala [minimum rating, maximum rating] geclippt:''')
 col1, col2 = st.columns(2)
 with col1:
     rating_min = st.number_input(label='Minimum Rating', value=1)
@@ -27,15 +26,22 @@ with col1:
 with col2:
     rating_max = st.number_input(label='Maximum Rating', value=5)
 
-inp_file = st.file_uploader(label='''Upload a csv-file (delimiter ';') with one row per rating and three columns in order 
-         <USER_ID>, <ITEM_ID>, <RATING>. The first row is assumed to contain column headers 
-         and no rating information:''')
+inp_file = st.file_uploader(label='''Laden Sie eine csv-Datei hoch bestehend aus einer Zeile pro
+                            Rating und drei Spalten in der Reihenfolge <USER_ID>, <ITEM_ID>, <RATING>.
+                            Die erste Zeile wird als Spaltenbezeichnungen interpretiert und kein
+                            Rating wird ausgelesen:''')
 
 data = None
 
 if inp_file:
 
-    df = pd.read_csv(inp_file, delimiter=';', header=0, names=['USER_ID', 'ITEM_ID', 'RATING'])
+    # We always assume column labels (see format description above)
+    header = 0
+    bla = io.StringIO(inp_file.getvalue().decode("utf-8"))
+    dialect = csv.Sniffer().sniff(bla.read())
+    df = pd.read_csv(inp_file, dialect=dialect, header=header, names=['USER_ID', 'ITEM_ID', 'RATING'])
+
+    # df = pd.read_csv(inp_file, delimiter=';', header=0, names=['USER_ID', 'ITEM_ID', 'RATING'])
     
     # A reader is still needed but only the rating_scale param is requiered.
     reader = Reader(rating_scale=(rating_min, rating_max))
@@ -44,14 +50,14 @@ if inp_file:
     data = Dataset.load_from_df(df[["USER_ID", "ITEM_ID", "RATING"]], reader)
 
 algo = None
-model_type = st.selectbox('Select  model type:', ('kNN - cosine','SVD'))
+model_type = st.selectbox('Wählen Sie den Algorithmus:', ('kNN - cosine','SVD'))
 
 if model_type == 'kNN - cosine':
-    user_based = st.checkbox('''User based: Select if case similarities should be computed 
-                                between users. Deselect to compute between items, 
-                                i.e. item based-approach).''', value=True)
+    user_based = st.checkbox('''User-basiert: Setzen Sie einen Haken, falls die Ähnlichkeiten
+                             zwischen Usern berechnet werden sollen. Heben Sie die Auswahl auf
+                             für den Item-basierten Ansatz.''', value=True)
     
-    k = st.number_input(label='k: Number of nearest neighbours to include', value=10)
+    k = st.number_input(label='k: Anzahl zu berücksichtigender nächster Nachbarn', value=10)
 
     sim_options = {
         "name": "cosine",
@@ -65,10 +71,10 @@ if model_type == 'SVD':
 if algo and data:
     
     # 1. train and evaluate 
-    test_size = st.number_input(label='Size of test set', value=0.2)
+    test_size = st.number_input(label='Anteilsmässige Grösse des Testdatensatzes', value=0.2)
 
-    at_k = st.number_input(label='Precision/recall at k', value=5)
-    at_k_threshold = st.number_input(label='Threshold for precision/recall at k', value=3.5)
+    at_k = st.number_input(label='Wählen Sie *k* für Precision/Recall @*k*', value=5)
+    at_k_threshold = st.number_input(label='Threshold für die Berechnung von Precision/Recall @*k*', value=3.5)
 
     trainset, testset = train_test_split(data, test_size=test_size, random_state=42)
     
@@ -84,10 +90,18 @@ if algo and data:
     precisions, recalls = s_utils.precision_recall_at_k(predictions_testset, k=at_k, 
                                                         threshold=at_k_threshold)
     
-    metrics['AvPrec@k'] = sum(prec for prec in precisions.values()) / len(precisions)
-    metrics['AvRec@k'] = sum(rec for rec in recalls.values()) / len(recalls)
+    metrics['MAP@k'] = sum(prec for prec in precisions.values()) / len(precisions)
+    metrics['MAR@k'] = sum(rec for rec in recalls.values()) / len(recalls)
 
-    st.table(metrics)
+    metrics_to_print = {
+        'Metric': [],
+        'Value': []
+    }
+    for k,v in metrics.items():
+        metrics_to_print['Metric'].append(k)
+        metrics_to_print['Value'].append('{:,.2f}'.format(v))
+
+    st.table(pd.DataFrame(metrics_to_print).style.hide())
 
     metrics['k'] = at_k
     metrics['@k threshold'] = at_k_threshold
@@ -106,7 +120,7 @@ if algo and data:
 
     
 
-    st.number_input(label='Select number of recommendations to produce per user:', value=5)
+    st.number_input(label='Wählen Sie die Anzahl zu berechnender Empfehlungen pro User:', value=5)
 
     top_n = s_utils.get_top_n(predictions, n=5)
 
@@ -125,14 +139,14 @@ if algo and data:
 
 
     st.download_button(
-        label='Download recommendations per user',
+        label='Download der berechneten Empfehlungen pro User',
         data=buffer,
         file_name='recommendations.xlsx',
         mime='application/vnd.ms-excel',
     )   
 
     with open('algo.pickle', 'rb') as f:
-        st.download_button('Download serialised model', f, file_name='algo.pickle')  # Defaults to 'application/octet-stream'
+        st.download_button('Download des serialisierten Modells', f, file_name='algo.pickle')  # Defaults to 'application/octet-stream'
     # st.download_button(
     #     label="Download serialised model",
     #     data=buffer_str,
